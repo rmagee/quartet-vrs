@@ -1,3 +1,13 @@
+django
+djangorestframework
+django-debug-toolbar
+django-test-plus
+factory-boy
+mixer
+django-coverage-plugin
+pytest-django
+pytest-sugar
+rstcheck
 coverage
 mock
 flake8
@@ -6,3 +16,8 @@ codecov
 sphinx_rtd_theme
 sphinx
 recommonmark
+quartet_capture
+quartet_masterdata
+quartet_epcis
+EPCPyYes
+EParseCIS

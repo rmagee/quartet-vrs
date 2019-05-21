@@ -4,7 +4,7 @@ Credits
 
 Development Lead
 ----------------
-
+* Chuck Sailer <chuck@chucksailer.com>
 * SerialLab <slab@serial-lab.com>
 
 Contributors
