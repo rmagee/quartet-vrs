@@ -50,7 +50,7 @@ source_suffix = ['.rst', '.md']
 master_doc = 'index'
 
 # General information about the project.
-project = u'quartet_vrs'
+project = u'QU4RTET Verification Router Service'
 copyright = u'2019, SerialLab'
 
 # The version info for the project you're documenting, acts as replacement for

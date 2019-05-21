@@ -1,3 +1,19 @@
 bumpversion
 wheel
+recommonmark
+sphinx_rtd_theme
+django
+djangorestframework
+django-debug-toolbar
+mixer
+rstcheck
+quartet_capture
+quartet_masterdata
+quartet_epcis
+EPCPyYes
+EParseCIS
+
+
+
+
 
