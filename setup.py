@@ -72,11 +72,15 @@ setup(
     zip_safe=False,
     keywords='quartet_vrs',
     classifiers=[
-        'Development Status :: 1 - Release',
+        'Development Status :: 5 - Production/Stable',
         'Framework :: Django :: 2.15',
+        'Intended Audience :: Healthcare Industry',
+        'Intended Audience :: Manufacturing',
         'Intended Audience :: Developers',
-        'License :: OSI Approved :: GNU General Public License v3',
+        'License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)',
         'Natural Language :: English',
+        'Programming Language :: Python :: 3',
+        'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.6',
     ],
 )
