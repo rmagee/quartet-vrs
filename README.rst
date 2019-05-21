@@ -1,6 +1,6 @@
-=============================
-quartet_vrs
-=============================
+===================================
+QU4RTET Verification Router Service
+===================================
 
 .. image:: https://gitlab.com/serial-lab/quartet_vrs/badges/master/coverage.svg
    :target: https://gitlab.com/serial-lab/quartet_vrs/pipelines
@@ -9,7 +9,8 @@ quartet_vrs
 .. image:: https://badge.fury.io/py/quartet_vrs.svg
     :target: https://badge.fury.io/py/quartet_vrs
 
-A GS1-compliant VRS interface for the open-source EPCIS QU4RTET platform.
+A GS1-compliant VRS interface for QU4RTET, the open-source EPCIS  platform.
+===========================================================================
 
 Documentation
 -------------
@@ -49,7 +50,11 @@ Add quartet_vrs's URL patterns:
 Features
 --------
 
-* TODO
+- REST API
+- Open API Schema
+- Implements the full Global Lightweight Messaging Standard v1.0.2
+- Provides ``checkconnectivty`` endpoint.
+- Provides ``verify`` endpoint.
 
 Running Tests
 -------------

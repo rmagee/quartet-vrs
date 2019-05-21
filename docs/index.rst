@@ -3,8 +3,8 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Welcome to quartet_vrs's documentation!
-=================================================================
+Welcome to the QU4RTET Verification Router Service (VRS) API documentation!
+===========================================================================
 
 Contents:
 
@@ -17,3 +17,4 @@ Contents:
    contributing
    authors
    history
+

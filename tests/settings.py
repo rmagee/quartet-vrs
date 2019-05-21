@@ -16,13 +16,26 @@ DATABASES = {
     }
 }
 
-ROOT_URLCONF = "tests.urls"
+REST_FRAMEWORK = {
+    'DEFAULT_PERMISSION_CLASSES': (
+        'rest_framework.permissions.IsAuthenticated',
+        'rest_framework.permissions.DjangoModelPermissions'
+    ),
+}
+
+
+ROOT_URLCONF = "quartet_vrs.urls"
 
 INSTALLED_APPS = [
-    "django.contrib.auth",
+
     "django.contrib.contenttypes",
+    "django.contrib.auth",
     "django.contrib.sites",
-    "quartet_vrs",
+    "quartet_vrs.apps.QuartetVrsConfig",
+    "quartet_capture",
+    "quartet_epcis",
+    "quartet_masterdata",
+
 ]
 
 SITE_ID = 1
