@@ -73,7 +73,6 @@ setup(
     keywords='quartet_vrs',
     classifiers=[
         'Development Status :: 5 - Production/Stable',
-        'Framework :: Django :: 2.15',
         'Intended Audience :: Healthcare Industry',
         'Intended Audience :: Manufacturing',
         'Intended Audience :: Developers',
