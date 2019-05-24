@@ -31,7 +31,5 @@ urlpatterns = [
         r'^verify/gtin/(?P<gtin>[0-9]{14})/lot/(?P<lot>[\w{}.-]*)/ser/(?P<serial_number>[\w{}.-]*)$',
         views.VerifyView.as_view(), name="verify"
     )
-
-
 ]
 

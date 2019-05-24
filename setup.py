@@ -57,16 +57,10 @@ setup(
     ],
     include_package_data=True,
     install_requires=[
-        'django',
-        'djangorestframework',
-        'mixer',
-        'recommonmark',
-        'sphinx_rtd_theme',
         'quartet_capture',
         'quartet_masterdata',
         'quartet_epcis',
-        'EPCPyYes',
-        'EParseCIS'
+        'mixer',
     ],
     license="GPLv3",
     zip_safe=False,
