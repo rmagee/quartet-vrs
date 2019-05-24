@@ -1,6 +1,5 @@
 django
 djangorestframework
-django-debug-toolbar
 django-test-plus
 factory-boy
 mixer
@@ -9,6 +8,7 @@ pytest-django
 pytest-sugar
 rstcheck
 coverage
+haikunator
 mock
 flake8
 tox
@@ -19,5 +19,3 @@ recommonmark
 quartet_capture
 quartet_masterdata
 quartet_epcis
-EPCPyYes
-EParseCIS

@@ -1,17 +1,19 @@
+django-model-utils>=2.0
 bumpversion
 wheel
 recommonmark
+rstcheck
 sphinx_rtd_theme
 django
 djangorestframework
 django-debug-toolbar
+haikunator
 mixer
 rstcheck
 quartet_capture
 quartet_masterdata
 quartet_epcis
-EPCPyYes
-EParseCIS
+
 
 
 
