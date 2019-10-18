@@ -19,7 +19,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from .verification import Verification
-from quartet_vrs.models import VRSGS1Locations
+from .models import VRSGS1Locations
 
 
 logger = logging.getLogger(__name__)
@@ -51,6 +51,7 @@ class CheckConnectivityView(APIView):
 
 
 class VerifyView(APIView):
+
 
     queryset = VRSGS1Locations.objects.none()
 

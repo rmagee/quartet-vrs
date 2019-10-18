@@ -27,14 +27,13 @@ REST_FRAMEWORK = {
 ROOT_URLCONF = "quartet_vrs.urls"
 
 INSTALLED_APPS = [
-
-    "django.contrib.contenttypes",
     "django.contrib.auth",
+    "django.contrib.contenttypes",
     "django.contrib.sites",
-    "quartet_vrs.apps.QuartetVrsConfig",
     "quartet_capture",
     "quartet_epcis",
     "quartet_masterdata",
+    "quartet_vrs.apps.QuartetVrsConfig",
 
 ]
 

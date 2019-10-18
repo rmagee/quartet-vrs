@@ -13,13 +13,14 @@
 #
 # Copyright 2019 SerialLab Corp.  All rights reserved.
 import traceback
+import uuid
 import logging
 from rest_framework import status
 from rest_framework.response import Response
 from EPCPyYes.core.v1_2 import helpers
 from quartet_epcis.db_api.queries import EPCISDBProxy
-from quartet_masterdata.models import TradeItem
-from quartet_vrs.models import VRSGS1Locations
+from quartet_masterdata.models import TradeItem, Location
+
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +36,7 @@ class Verification():
     def check_connectivity(gtin: str, req_gln: str, context: str="dscsaSaleableReturn"):
         """
                    The checkConnectivity method enables a check of connectivity with the QU4RTET verification service and returns
-                   the appropriate HTTP status code. If the Requestor GLN (reqGLN) is not recognised, QU4RTET verification service will
+                   the appropriate HTTP status code. If the Requestor GLN (reqGLN) is not recognized, QU4RTET verification service will
                    respond with an HTTP 401 'Unauthorized' response. If the Requestor GLN (reqGLN) is not permitted to make requests, the verification
                    service will respond with an HTTP 403 'Forbidden' response.
 
@@ -47,23 +48,18 @@ class Verification():
         try:
             ret_val = None
             try:
-                trade_item = TradeItem.objects.select_related().get(GTIN14=gtin)
-                response_gln = trade_item.company.GLN13
-                if response_gln != req_gln:
-                    req_gln = VRSGS1Locations.objects.get(GLN13=req_gln)
-                    if not req_gln.active:
-                        ret_val = Response(status=status.HTTP_403_FORBIDDEN, content_type="application/json")
-                    else:
-                        ret_val = Response(
-                            {"responderGLN": response_gln},
-                            status=status.HTTP_200_OK,
-                            content_type="application/json"
-                        )
-            except TradeItem.DoesNotExist:
-                logger.error('qu4rtet_vrs.checkConnectivity().\r\n No TradeItems match GTIN : %s.' % gtin)
+                location = Location.objects.get(GLN13=req_gln)
+                ret_val = Response(
+                    {
+                        "responderGLN": req_gln},
+                        status=status.HTTP_200_OK,
+                        content_type="application/json"
+                    )
+            except Location.DoesNotExist:
+                logger.error('qu4rtet_vrs.checkConnectivity().\r\n No Locations match reqGLN : %s.' % req_gln)
                 ret_val = Response(status=status.HTTP_401_UNAUTHORIZED, content_type="application/json")
-            except VRSGS1Locations.DoesNotExist:
-                logger.error('qu4rtet_vrs.checkConnectivity().\r\n No VRSGS1Locations match reqGLN : %s.' % req_gln)
+            except Exception as e:
+                logger.error('qu4rtet_vrs.checkConnectivity().\r\n Unexpected Error : %s.' % str(e))
                 ret_val = Response(status=status.HTTP_401_UNAUTHORIZED, content_type="application/json")
 
         except Exception:
@@ -93,6 +89,8 @@ class Verification():
         response_gln = None
         lot_matched = False
         exp_matched = False
+        if correlation_id is None or len(correlation_id) == 0:
+            correlation_id = str(uuid.uuid4())
         try:
             trade_item = TradeItem.objects.select_related().get(GTIN14=gtin)
             company_prefix = trade_item.company.gs1_company_prefix
@@ -260,6 +258,7 @@ class Verification():
 
     @staticmethod
     def _format_exp_date(date):
+        return date.replace('-','')
         if date.find("-") > 0:
             prts = date.split("-")
             if len(prts[0]) == 4:
