@@ -19,7 +19,7 @@ from rest_framework import status
 from rest_framework.response import Response
 from EPCPyYes.core.v1_2 import helpers
 from quartet_epcis.db_api.queries import EPCISDBProxy
-from quartet_masterdata.models import TradeItem, Location
+from quartet_masterdata.models import TradeItem, Company
 
 
 logger = logging.getLogger(__name__)
@@ -48,16 +48,20 @@ class Verification():
         try:
             ret_val = None
             try:
-                location = Location.objects.get(GLN13=req_gln)
+                Company.objects.get(GLN13=req_gln)
+                TradeItem.objects.get(GTIN14=gtin)
                 ret_val = Response(
                     {
                         "responderGLN": req_gln},
                         status=status.HTTP_200_OK,
                         content_type="application/json"
                     )
-            except Location.DoesNotExist:
-                logger.error('qu4rtet_vrs.checkConnectivity().\r\n No Locations match reqGLN : %s.' % req_gln)
-                ret_val = Response(status=status.HTTP_401_UNAUTHORIZED, content_type="application/json")
+            except Company.DoesNotExist:
+                logger.error('qu4rtet_vrs.checkConnectivity().\r\n The reqGLN was not found and could not be verified. GLN : %s.' % req_gln)
+                ret_val = Response(data='The reqGLN was not found and could not be verified.', status=status.HTTP_401_UNAUTHORIZED, content_type="application/json")
+            except TradeItem.DoesNotExist:
+                logger.error('qu4rtet_vrs.checkConnectivity().\r\n The GTIN-14 was not found and could not be verified. GTIN-14 : %s.' % gtin)
+                ret_val = Response(data='The GTIN-14 was not found and could not be verified.',status=status.HTTP_401_UNAUTHORIZED, content_type="application/json")
             except Exception as e:
                 logger.error('qu4rtet_vrs.checkConnectivity().\r\n Unexpected Error : %s.' % str(e))
                 ret_val = Response(status=status.HTTP_401_UNAUTHORIZED, content_type="application/json")
