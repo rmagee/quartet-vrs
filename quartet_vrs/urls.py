@@ -28,7 +28,7 @@ urlpatterns = [
     ),
     # The verify url is http(s)://www.example.com/gtin/{gtin}/lot/{lot}/ser/{ser}?exp={exp}
     url(
-        r'^verify/gtin/(?P<gtin>[0-9]{14})/lot/(?P<lot>[\w{}.-]*)/ser/(?P<serial_number>[\w{}.-]*)$',
+        r'^verify/gtin/(?P<gtin>[0-9]{14})/lot/(?P<lot>[\w{}.-]*)/ser/(?P<serial_number>[\x21-\x22\x25-\x2F\x30-\x39\x3A-\x3F\x41-\x5A\x5F\x61-\x7A]{0,20})/?$',
         views.VerifyView.as_view(), name="verify"
     )
 ]
