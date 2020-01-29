@@ -52,3 +52,4 @@ VRS.postman_collection.json
 .env
 postgres-data
 static
+setenvs.sh
