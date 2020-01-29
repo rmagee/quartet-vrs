@@ -13,10 +13,14 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 # Copyright 2019 SerialLab Corp.  All rights reserved.
+import os
 from django.conf.urls import url
-
+from django.contrib import admin
+from django.urls import path
 
 from . import views
+
+from quartet_capture.urls import urlpatterns as capture_urls
 
 app_name = 'quartet_vrs'
 
@@ -30,6 +34,11 @@ urlpatterns = [
     url(
         r'^verify/gtin/(?P<gtin>[0-9]{14})/lot/(?P<lot>[\w{}.-]*)/ser/(?P<serial_number>[\w{}.-]*)$',
         views.VerifyView.as_view(), name="verify"
-    )
+    ),
+    path('vrsadmin/', admin.site.urls),
 ]
 
+STAND_ALONE = os.environ.get('STAND_ALONE')
+
+if STAND_ALONE:
+    urlpatterns += capture_urls

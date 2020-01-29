@@ -15,6 +15,7 @@
 import traceback
 import uuid
 import logging
+from .vrs_conductor import Conductor
 from rest_framework import status
 from rest_framework.response import Response
 from EPCPyYes.core.v1_2 import helpers
@@ -31,6 +32,8 @@ class Verification():
     VERIFICATION_CODE_GTIN_SERIAL_LOT = "No_match_GTIN_Serial_Lot"
     VERIFICATION_CODE_GTIN_SERIAL_EXPIRY = "No_match_GTIN_Serial_Expiry"
     VERIFICATION_CODE_NO_REASON = "No_reason_provided"
+    VERIFICATION_CODE_GTIN_NOT_REGISTERED = "GTIN_not_registered"
+    VERIFICATION_CODE_GTIN_NOT_FOUND = "GTIN_not_found"
 
     @staticmethod
     def check_connectivity(gtin: str, req_gln: str, context: str="dscsaSaleableReturn"):
@@ -57,8 +60,9 @@ class Verification():
                         content_type="application/json"
                     )
             except Company.DoesNotExist:
-                logger.error('qu4rtet_vrs.checkConnectivity().\r\n The reqGLN was not found and could not be verified. GLN : %s.' % req_gln)
-                ret_val = Response(data='The reqGLN was not found and could not be verified.', status=status.HTTP_401_UNAUTHORIZED, content_type="application/json")
+                msg = 'qu4rtet_vrs.checkConnectivity().\r\n The reqGLN was not found and could not be verified. GLN : %s.' % req_gln
+                logger.error(msg)
+                ret_val = Response(data=msg, status=status.HTTP_401_UNAUTHORIZED, content_type="application/json")
             except TradeItem.DoesNotExist:
                 logger.error('qu4rtet_vrs.checkConnectivity().\r\n The GTIN-14 was not found and could not be verified. GTIN-14 : %s.' % gtin)
                 ret_val = Response(data='The GTIN-14 was not found and could not be verified.',status=status.HTTP_401_UNAUTHORIZED, content_type="application/json")
@@ -99,9 +103,31 @@ class Verification():
             trade_item = TradeItem.objects.select_related().get(GTIN14=gtin)
             company_prefix = trade_item.company.gs1_company_prefix
             response_gln = trade_item.company.GLN13
+        except TradeItem.DoesNotExist:
+            try:
+                result = Conductor().resolve_ex(gtin)
+                ret_val = Verification._verification_message(
+                    response_gln=response_gln,
+                    correlation_id=correlation_id,
+                    verified=False,
+                    reason=Verification.VERIFICATION_CODE_GTIN_NOT_REGISTERED,
+                    location=result[0].address
+                )
+            except:
+                tb = traceback.format_exc()
+                logger.error(tb)
+                # Build Response
+                ret_val = Verification._verification_message(
+                    response_gln=response_gln,
+                    correlation_id=correlation_id,
+                    verified=False,
+                    reason=Verification.VERIFICATION_CODE_GTIN_NOT_FOUND
+                )
+
         except Exception:
             # Whatever Exception happens here, the GTIN was not found.
             # Log Exception
+
             tb = traceback.format_exc()
             logger.error(tb)
             # Build Response
@@ -122,8 +148,8 @@ class Verification():
             db_proxy = EPCISDBProxy()
             # If events are returned, consider GTIN and Serial Number Verified
             try:
-                events = None
                 events = db_proxy.get_events_by_entry_identifer(entry_identifier=epc)
+
                 if len(events) == 0:
                     # No events means GTIN & Serial Number could not be verified
                     ret_val = Verification._verification_message(
@@ -208,7 +234,8 @@ class Verification():
                               correlation_id: str = "",
                               verified: bool = True,
                               reason: str = VERIFICATION_CODE_NO_REASON,
-                              additional_info: bool = False):
+                              additional_info: bool = False,
+                              location:str=''):
         '''
         Static Method that builds a Verification Message, with or without Additional Information.
         :param correlation_id: Correlation UUID provided by Requestor
@@ -258,6 +285,8 @@ class Verification():
                     },
                     "corrUUID": correlation_id
                 }
+            if len(location) > 0:
+                ret_val['location'] = location
         return ret_val
 
     @staticmethod

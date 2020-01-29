@@ -21,7 +21,7 @@ from rest_framework.test import APITestCase
 # from quartet_vrs.verification import Verification
 # from quartet_masterdata.models import TradeItem, Company
 # from quartet_epcis.parsing.parser import QuartetParser
-# from quartet_vrs.management.command.create_vrs_groups import Command
+# from quartet_vrs.management.commands.create_vrs_groups import Command
 
 
 os.environ['DJANGO_SETTINGS_MODULE'] = 'tests.settings'

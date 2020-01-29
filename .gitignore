@@ -49,3 +49,6 @@ docs/_build
 
 qu4rtetmasterdataimages/
 VRS.postman_collection.json
+.env
+postgres-data
+static
