@@ -17,17 +17,6 @@ import pprint
 env = environ.Env(
     DEBUG=(bool, False),
     SECRET_KEY=(str, ''),
-    STAND_ALONE=(bool, False),
-    DOCKER=(bool, False),
-    VRS_DOCKER_DB=(str,''),
-    VRS_DOCKER_DB_USER=(str,''),
-    VRS_DOCKER_DB_PWD=(str,''),
-    VRS_DOCKER_DB_HOST=(str,''),
-    VRS_DB=(str,''),
-    VRS_DB_USER=(str,''),
-    VRS_DB_PWD=(str,''),
-    VRS_DB_HOST=(str,''),
-    VRS_DOCKER_DB_PORT=(str,'5432')
 )
 # reading .env file
 environ.Env.read_env()
@@ -47,34 +36,6 @@ SECRET_KEY = env('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env('DEBUG')
-STAND_ALONE = env('STAND_ALONE')
-DOCKER = env('DOCKER')
-
-if DOCKER:
-    db = env('VRS_DOCKER_DB')
-    user = env('VRS_DOCKER_DB_USER')
-    pwd = env('VRS_DOCKER_DB_PWD')
-    host = env('VRS_DOCKER_DB_HOST')
-    port = env('VRS_DOCKER_DB_PORT')
-    os.environ['VRS_DOCKER_DB'] = db
-    os.environ['VRS_DOCKER_DB_USER'] = user
-    os.environ['VRS_DOCKER_DB_PWD'] = pwd
-    os.environ['VRS_DOCKER_DB_HOST'] = host
-    os.environ['VRS_DOCKER_DB_PORT'] = port
-elif STAND_ALONE:
-    db = env('VRS_DB')
-    user = env('VRS_DB_USER')
-    pwd = env('VRS_DB_PWD')
-    host = env('VRS_DB_HOST')
-    port = env('VRS_DB_PORT')
-    os.environ['VRS_DB'] = db
-    os.environ['VRS_DB_USER'] = user
-    os.environ['VRS_DB_PWD'] = pwd
-    os.environ['VRS_DB_HOST'] = host
-    os.environ['VRS_DOCKER_DB_PORT'] = port
-
-
-
 
 ALLOWED_HOSTS = ['*']
 
@@ -89,17 +50,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-
 ]
-
-if STAND_ALONE:
-    LOCAL_APPS = [
-        'quartet_masterdata',
-        "quartet_capture",
-        "quartet_epcis",
-        "quartet_vrs",
-    ]
-    INSTALLED_APPS=INSTALLED_APPS+LOCAL_APPS
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -162,17 +113,6 @@ USE_L10N = True
 
 USE_TZ = True
 
-if len(db) > 0:
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.postgresql',
-            'NAME': db,
-            'USER': user,
-            'HOST': host,
-            'PASSWORD':pwd,
-            'PORT': port,
-        }
-    }
 
 STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'static')

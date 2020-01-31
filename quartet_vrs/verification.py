@@ -15,7 +15,6 @@
 import traceback
 import uuid
 import logging
-from .vrs_conductor import Conductor
 from rest_framework import status
 from rest_framework.response import Response
 from EPCPyYes.core.v1_2 import helpers
@@ -105,13 +104,13 @@ class Verification():
             response_gln = trade_item.company.GLN13
         except TradeItem.DoesNotExist:
             try:
-                result = Conductor().resolve_ex(gtin)
+                #result = Conductor().resolve_ex(gtin)
                 ret_val = Verification._verification_message(
                     response_gln=response_gln,
                     correlation_id=correlation_id,
                     verified=False,
                     reason=Verification.VERIFICATION_CODE_GTIN_NOT_REGISTERED,
-                    location=result[0].address
+                    location=""
                 )
             except:
                 tb = traceback.format_exc()
