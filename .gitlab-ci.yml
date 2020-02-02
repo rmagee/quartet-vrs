@@ -23,7 +23,7 @@ python3_6_unit_test:
   script:
   - apt-get install -y git
   - export PYTHONPATH=$PYTHONPATH:$CI_PROJECT_DIR
-  - pip install -r requirements_test.txt
+  - pip install -r requirements.txt
   - coverage run runtests.py
   - coverage report -m
   - coverage html
