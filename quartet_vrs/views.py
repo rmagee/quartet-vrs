@@ -155,7 +155,6 @@ class GTINMapView(viewsets.ModelViewSet):
     queryset = GTINMap.objects.all()
     serializer_class = GTINMapSerializer
 
-
     def get_queryset(self):
         """ allow rest api to filter by gtin """
         queryset = []

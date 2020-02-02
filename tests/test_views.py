@@ -183,8 +183,8 @@ class ViewTest(APITestCase):
     def test_gtin_map(self):
 
         data = {
-            "gtin": "00000000000000",
-            "host": "test.qu4rtet.io",
+            "gtin": "00000000000019",
+            "host": "test2.qu4rtet.io",
             "path":"/vrs",
             "gs1_compliant":True,
             "use_ssl":False
