@@ -48,12 +48,12 @@ django-storages==1.8
 django-test-plus==1.2.0
 djangorestframework==3.10.3
 djangorestframework-csv==2.1.0
--e git://github.com/rmagee/django-rest-framework-xml.git@12e59d2a7a6927cab46a234fc84a841efa7adb99#egg=djangorestframework_xml
+djangorestframework-xml==1.4.0
 dnspython==1.16.0
 docutils==0.15.2
 drf-yasg==1.17.0
 elastic-apm==5.3.3
--e git+git@gitlab.com:serial-lab/EParseCIS.git@99c4b8899633657d98ce61f6fe4b0a9835bf610a#egg=eparsecis
+eparsecis==3.1.0
 EPCPyYes==2.0.4
 factory-boy==2.12.0
 Faker==0.9.1
@@ -116,15 +116,14 @@ python3-openid==3.1.0
 pytz==2019.3
 PyYAML==5.3
 quartet-capture==3.0.2
--e git+https://gitlab.com/serial-lab/quartet_epcis.git@8eed992a46338a82a4637e9687bddbda82e45266#egg=quartet_epcis
+quartet-epcis==2.0.0
 quartet-integrations==4.2.0
 quartet-manifest==1.0.5
--e git+https://gitlab.com/serial-lab/quartet_masterdata.git@9930c60ceb130716c144813cc60be1af929567cf#egg=quartet_masterdata
--e git+https://gitlab.com/serial-lab/quartet_output.git@f969e72261d5447444a8232360b455397f26ba24#egg=quartet_output
+quartet-masterdata==1.8.3
+quartet-output==3.0.0
 quartet-templates==2.0.0
 quartet-tracelink==1.0.18
 quartet-trail==2.0.1
--e git+git@gitlab.com:serial-lab/quartet_vrs.git@80be8ccf1b70c1d23e2e55b3b5b105b52d76db1b#egg=quartet_vrs
 random-flavorpack==2.0.1
 raven==6.10.0
 recommonmark==0.5.0
