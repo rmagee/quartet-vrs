@@ -17,17 +17,21 @@ import logging
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+import coreapi, coreschema
+from rest_framework.schemas import ManualSchema
+from rest_framework import viewsets
+from .serializers import GTINMapSerializer
 from .verification import Verification
-from quartet_vrs.models import VRSGS1Locations
+from quartet_masterdata.models import Company
 
+from .models import GTINMap
 
 logger = logging.getLogger(__name__)
 
 
 class CheckConnectivityView(APIView):
 
-    queryset = VRSGS1Locations.objects.none()
+    queryset = Company.objects.none()
 
     def get(self, request):
         '''
@@ -52,7 +56,8 @@ class CheckConnectivityView(APIView):
 
 class VerifyView(APIView):
 
-    queryset = VRSGS1Locations.objects.none()
+
+    queryset = Company.objects.none()
 
     def get(self, request, *args, **kwargs):
         """
@@ -105,3 +110,57 @@ class VerifyView(APIView):
             return ret_val
 
 
+class GTINMapView(viewsets.ModelViewSet):
+    """
+    API endpoint that allows GTIN Maps to be viewed or edited.
+    """
+    schema = ManualSchema(fields=[
+        coreapi.Field(
+            "gtin",
+            required=True,
+            location="path",
+            schema=coreschema.String(),
+            description="A GTIN-14"
+        ),
+        coreapi.Field(
+            "path",
+            required=False,
+            location="path",
+            schema=coreschema.String(),
+            description="The Sub Route/Path. For example, if the FQDN is https://vrs.someserver.com/vrs, then the path is /vrs"
+        ),
+        coreapi.Field(
+            "host",
+            required=False,
+            location="path",
+            schema=coreschema.String(),
+            description="The host name of the VRS Router. For example: vrs.someserver.com"
+        ),
+        coreapi.Field(
+            "gs1_compliant",
+            required=True,
+            location="path",
+            schema=coreschema.String(),
+            description="True if the VRS Router is compliant with GS1."
+        ),
+        coreapi.Field(
+            "use_ssl",
+            required=True,
+            location="path",
+            schema=coreschema.String(),
+            description="True if the VRS Router should use SSL when connecting to the host and path."
+        ),
+
+    ])
+    queryset = GTINMap.objects.all()
+    serializer_class = GTINMapSerializer
+
+    def get_queryset(self):
+        """ allow rest api to filter by gtin """
+        queryset = []
+        queryset = GTINMap.objects.all()
+        gtin = self.request.query_params.get('gtin', None)
+        if gtin is not None:
+            queryset = queryset.filter(gtin=gtin)
+
+        return queryset

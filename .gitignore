@@ -48,3 +48,8 @@ output/*/index.html
 docs/_build
 
 qu4rtetmasterdataimages/
+VRS.postman_collection.json
+quartet_vrs/.env
+postgres-data
+static
+setenvs.sh
