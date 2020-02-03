@@ -13,6 +13,7 @@
 #
 # Copyright 2019 SerialLab Corp.  All rights reserved.
 import traceback
+import json
 import logging
 from rest_framework import status
 from rest_framework.views import APIView
@@ -24,13 +25,12 @@ from .serializers import GTINMapSerializer
 from .verification import Verification
 from quartet_masterdata.models import Company
 
-from .models import GTINMap
+from .models import GTINMap, RequestLog
 
 logger = logging.getLogger(__name__)
 
 
 class CheckConnectivityView(APIView):
-
     queryset = Company.objects.none()
 
     def get(self, request):
@@ -47,16 +47,23 @@ class CheckConnectivityView(APIView):
          :param request: HTTP Request
          :return: respone: HTTP Response
         '''
-
+        success=False
         gtin = request.GET.get('gtin', '')
         reqGLN = request.GET.get('reqGLN', '')
         context = request.GET.get('context', 'dscsaSaleableReturn')
-        return Verification.check_connectivity(gtin=gtin, req_gln=reqGLN, context=context)
+
+        ret_val = Verification.check_connectivity(gtin=gtin, req_gln=reqGLN, context=context)
+        try:
+            gln = ret_val.data['responderGLN']
+            success = gln is not None
+        except:
+            pass
+        RequestLogger.log(request, response=ret_val, operation='checkConnectivity', success=success)
+
+        return ret_val
 
 
 class VerifyView(APIView):
-
-
     queryset = Company.objects.none()
 
     def get(self, request, *args, **kwargs):
@@ -73,7 +80,7 @@ class VerifyView(APIView):
         :return:
         """
         try:
-
+            success = False
             ret_val = None
             # Get URL embedded Params
             gtin = kwargs.get('gtin', None)
@@ -84,28 +91,31 @@ class VerifyView(APIView):
             correlation_id = request.GET.get('corrUUID', '')
             # Verify
             verification_message = Verification.verify(gtin=gtin,
-                                lot=lot,
-                                serial_number=serial_number,
-                                correlation_id=correlation_id,
-                                exp=exp)
+                                                       lot=lot,
+                                                       serial_number=serial_number,
+                                                       correlation_id=correlation_id,
+                                                       exp=exp)
             # Build Response
+            success = True
             ret_val = Response(
-                                verification_message,
-                                status=status.HTTP_200_OK,
-                                headers={'Cache-Control': 'private, no-cache'},
-                                content_type="application/json"
+                verification_message,
+                status=status.HTTP_200_OK,
+                headers={'Cache-Control': 'private, no-cache'},
+                content_type="application/json"
             )
         except Exception:
             # Exception Occurred, return 401
             tb = traceback.format_exc()
             logger.error(tb)
             ret_val = Response(
-                            status=status.HTTP_401_UNAUTHORIZED,
-                            headers={'Cache-Control': 'private, no-cache'},
-                            content_type="application/json"
+                status=status.HTTP_401_UNAUTHORIZED,
+                headers={'Cache-Control': 'private, no-cache'},
+                content_type="application/json"
             )
 
         finally:
+            # Log Request
+            RequestLogger.log(request, response=ret_val, operation='verify', success=success)
             # return built response
             return ret_val
 
@@ -164,3 +174,75 @@ class GTINMapView(viewsets.ModelViewSet):
             queryset = queryset.filter(gtin=gtin)
 
         return queryset
+
+
+class RequestLogger(object):
+    """
+    Class to log all requests
+    """
+
+    @staticmethod
+    def log(request, response, operation, success):
+        """
+        Static Method to log requests
+        :param request: HTTP Request to log
+        :return: None
+        """
+        # Use a try/except to capture request data
+        logger.debug("Entering RequestLogger.log()")
+        try:
+            remote_address = request.META['REMOTE_ADDR']
+        except:
+            remote_address = None
+        try:
+            expiry = request.query_params['exp']
+        except:
+            expiry=None
+        try:
+            request_gln = request.query_params['reqGLN']
+        except:
+            request_gln=None
+        try:
+            corr_uuid = request.query_params['corrUUID']
+        except:
+            corr_uuid=None
+        try:
+            kwargs = request.parser_context['kwargs']
+        except:
+            kwargs=None
+        try:
+            gtin = kwargs['gtin']
+        except:
+            gtin=None
+        try:
+            lot = kwargs['lot']
+        except:
+            lot = None
+        try:
+            serial_number = kwargs['serial_number']
+        except:
+            serial_number=None
+        try:
+            user_name = request.user.username
+        except:
+            user_name=None
+
+        # create log entry
+        try:
+            RequestLog.objects.update_or_create(
+                remote_address=remote_address,
+                expiry=expiry,
+                request_gln=request_gln,
+                corr_uuid=corr_uuid,
+                gtin=gtin,
+                lot=lot,
+                serial_number=serial_number,
+                user_name=user_name,
+                response=json.dumps(response.data),
+                operation=operation,
+                success=success
+            )
+        except Exception as e:
+            # will not throw, just log
+            tb = traceback.format_exc()
+            logger.error(tb)

@@ -19,5 +19,18 @@ from quartet_vrs import models
 class GTINMapAdmin(admin.ModelAdmin):
     list_display = ('gtin', 'host', 'path', 'gs1_compliant', 'use_ssl')
     ordering = ('gtin',)
+    search_fields = ['gtin',]
+
+@admin.register(models.RequestLog)
+class RequestLogAdmin(admin.ModelAdmin):
+    list_display = ('success', 'operation', 'created', 'gtin', 'lot', 'expiry', 'remote_address', 'serial_number')
+    ordering = ('-created',)
+    search_fields = ['created', 'gtin', 'lot', 'expiry' , 'serial_number', 'success']
+    readonly_fields = ['created', 'gtin', 'lot', 'expiry', 'remote_address',
+                       'request_gln', 'corr_uuid', 'response', 'operation',
+                       'serial_number','user_name', 'success']
+
+
 def register_to_site(admin_site):
     admin_site.register(models.GTINMap, GTINMapAdmin)
+    admin_site.register(models.RequestLog, RequestLogAdmin)
