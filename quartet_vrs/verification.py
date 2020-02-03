@@ -20,7 +20,7 @@ from rest_framework.response import Response
 from EPCPyYes.core.v1_2 import helpers
 from quartet_epcis.db_api.queries import EPCISDBProxy
 from quartet_masterdata.models import TradeItem, Company
-
+from quartet_vrs.models import RequestLog, GTINMap
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +68,6 @@ class Verification():
             except Exception as e:
                 logger.error('qu4rtet_vrs.checkConnectivity().\r\n Unexpected Error : %s.' % str(e))
                 ret_val = Response(status=status.HTTP_401_UNAUTHORIZED, content_type="application/json")
-
         except Exception:
             # Unexpected error, return HTTP 500 Server Error and log the exception
             data = traceback.format_exc()
@@ -76,7 +75,6 @@ class Verification():
             ret_val = Response({"error": "A Server Error occurred servicing this request"},
                                status.HTTP_500_INTERNAL_SERVER_ERROR, content_type="application/json")
         finally:
-            # Return Response
             return ret_val
 
     @staticmethod

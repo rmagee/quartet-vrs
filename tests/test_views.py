@@ -25,7 +25,7 @@ from quartet_masterdata.models import TradeItem, Company
 from quartet_epcis.parsing.parser import QuartetParser
 from quartet_vrs.management.commands.create_vrs_groups import Command
 from quartet_vrs.views import GTINMapView, CheckConnectivityView, VerifyView
-from quartet_vrs.models import GTINMap
+from quartet_vrs.models import GTINMap, RequestLog
 
 os.environ['DJANGO_SETTINGS_MODULE'] = 'tests.settings'
 django.setup()
@@ -44,7 +44,7 @@ class ViewTest(APITestCase):
         self.expiry_date = "20151231"
         self.company_prefix = "305555"
         self.invalid_gln = "0359767999914"
-
+        self.log_gtin = '90000000000001'
 
         user = User.objects.create_superuser(username='testuser',
                                         password='unittest',
@@ -60,6 +60,7 @@ class ViewTest(APITestCase):
         company = mixer.blend(Company, gs1_company_prefix=self.company_prefix, GLN13=self.response_gln)
         # Build a Test TradeItem
         mixer.blend(TradeItem, company = company, GTIN14=self.gtin)
+        mixer.blend(TradeItem, company=company, GTIN14=self.log_gtin)
         # Build a GTIN Map
         mixer.blend(GTINMap, gtin = "00000000000001",
             host="test.qu4rtet.io",
@@ -126,6 +127,51 @@ class ViewTest(APITestCase):
 
         data = msg["data"]
         self.assertEquals(data["verified"], True)
+
+    def test_verify_200_log(self):
+
+        corrID = str(uuid.uuid4())
+
+        user = User.objects.get(username='testuser')
+        client = APIClient()
+        client.force_authenticate(user=user)
+
+        url = reverse('verify', kwargs=
+            {'gtin': self.gtin,
+             'lot': self.lot_number,
+             'serial_number':self.serial_number
+            })
+        url += "?exp={0}&corrUUID={1}".format(self.expiry_date, corrID)
+
+        response = client.get(url)
+
+        self.assertEquals(response.status_code, 200)
+        msg = response.data
+
+        self.assertEquals(msg["responderGLN"], self.response_gln)
+        self.assertEquals(msg["corrUUID"], corrID)
+        self.assertIsNotNone(msg["verificationTimestamp"])
+
+        data = msg["data"]
+        self.assertEquals(data["verified"], True)
+        try:
+            log_entry = RequestLog.objects.get(gtin=self.gtin, lot=self.lot_number, serial_number=self.serial_number)
+        except RequestLog.DoesNotExist:
+            raise Exception('Log Entry Not Found in test_verify_200_log')
+
+
+        # check the logged data
+        log_data = json.loads(log_entry.response)
+
+        self.assertEquals(msg["responderGLN"], log_data["responderGLN"])
+        self.assertEquals(msg["corrUUID"], log_data["corrUUID"])
+        self.assertEquals(msg["verificationTimestamp"], log_data["verificationTimestamp"])
+        self.assertEquals(data["verified"], log_data['data']['verified'])
+        self.assertEquals(log_entry.operation, 'verify')
+        self.assertEquals(log_entry.user_name, 'testuser')
+        self.assertEquals(log_entry.gtin, self.gtin)
+        self.assertEquals(log_entry.lot, self.lot_number)
+        self.assertEquals(log_entry.serial_number, self.serial_number)
 
     def test_verify_unverified(self):
 
