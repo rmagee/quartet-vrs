@@ -191,7 +191,7 @@ class RequestLogger(object):
         # Use a try/except to capture request data
         logger.debug("Entering RequestLogger.log()")
         try:
-            remote_address = request.META['REMOTE_ADDR']
+            remote_address = get_client_ip(request)
         except:
             remote_address = None
         try:
@@ -227,6 +227,12 @@ class RequestLogger(object):
         except:
             user_name=None
 
+        if hasattr(response, 'data'):
+            resp = json.dumps(response.data)
+        else:
+            resp = json.dumps(response)
+
+
         # create log entry
         try:
             RequestLog.objects.update_or_create(
@@ -238,7 +244,7 @@ class RequestLogger(object):
                 lot=lot,
                 serial_number=serial_number,
                 user_name=user_name,
-                response=json.dumps(response.data),
+                response=resp,
                 operation=operation,
                 success=success
             )
@@ -246,3 +252,11 @@ class RequestLogger(object):
             # will not throw, just log
             tb = traceback.format_exc()
             logger.error(tb)
+
+def get_client_ip(request):
+    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+    if x_forwarded_for:
+        ip = x_forwarded_for.split(',')[0]
+    else:
+        ip = request.META.get('REMOTE_ADDR')
+    return ip

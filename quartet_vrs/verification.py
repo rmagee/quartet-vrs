@@ -55,8 +55,8 @@ class Verification():
         try:
             ret_val = None
             try:
-                Company.objects.get(GLN13=req_gln)
                 TradeItem.objects.get(GTIN14=gtin)
+                Company.objects.get(GLN13=req_gln)
                 ret_val = Response(
                     {
                         "responderGLN": req_gln},
@@ -68,8 +68,12 @@ class Verification():
                 logger.error(msg)
                 ret_val = Response(data=msg, status=status.HTTP_401_UNAUTHORIZED, content_type="application/json")
             except TradeItem.DoesNotExist:
-                logger.error('qu4rtet_vrs.checkConnectivity().\r\n The GTIN-14 was not found and could not be verified. GTIN-14 : %s.' % gtin)
-                ret_val = Response(data='The GTIN-14 was not found and could not be verified.',status=status.HTTP_401_UNAUTHORIZED, content_type="application/json")
+                try:
+                    response = Verification._check_connectivity_external(gtin, req_gln)
+                    ret_val = Response(data=response,status=status.HTTP_200_OK, content_type="application/json")
+                except Exception as e:
+                    logger.error('qu4rtet_vrs.checkConnectivity().\r\n The GTIN-14 was not found and could not be verified. GTIN-14 : %s.' % gtin)
+                    ret_val = Response(data='The GTIN-14 was not found and could not be verified.',status=status.HTTP_401_UNAUTHORIZED, content_type="application/json")
             except Exception as e:
                 logger.error('qu4rtet_vrs.checkConnectivity().\r\n Unexpected Error : %s.' % str(e))
                 ret_val = Response(status=status.HTTP_401_UNAUTHORIZED, content_type="application/json")
@@ -81,6 +85,61 @@ class Verification():
                                status.HTTP_500_INTERNAL_SERVER_ERROR, content_type="application/json")
         finally:
             return ret_val
+
+    @staticmethod
+    def _check_connectivity_external(gtin: str, req_gln: str, context: str = "dscsaSaleableReturn"):
+
+        try:
+            map = GTINMap.objects.get(gtin=gtin)
+            if map.use_ssl:
+                protocol = "https://"
+            else:
+                protocol = "http://"
+
+            if map.port is not None and map.port != "443" and map.port != "80":
+                host = "{0}{1}:{2}".format(protocol, map.host, map.port)
+            else:
+                host = "{0}{1}".format(protocol, map.host)
+
+            path = posixpath.join(map.path,
+                                  "checkConnectivity?gtin={0}&reqGLN={1}".format(gtin, req_gln))
+
+            logger.info('checkConnectivity using External VRS at {0}'.format(host))
+            url = urllib.parse.urljoin(host, path)
+
+            if map.user_name is not None:
+                response = requests.get(url, auth=HTTPBasicAuth(map.user_name, map.password))
+            else:
+                response = requests.get(url)
+            if response.status_code != status.HTTP_200_OK:
+               raise Exception(response.content)
+
+            ret_val = response.json()
+            # Add the external VRS host
+            ret_val['location'] = map.host
+
+        except GTINMap.DoesNotExist:
+            desc = 'GTIN: {0} is not mapped to an external VRS'.format(gtin)
+            logger.error(desc)
+            ret_val = Verification._verification_message(
+                response_gln="",
+                correlation_id="",
+                verified=False,
+                reason=Verification.VERIFICATION_CODE_GTIN_NOT_FOUND,
+                description=desc
+            )
+        except Exception as e:
+            desc = 'Unable to verify GTIN: {0} using external VRS at {0}'.format(gtin, host)
+            logger.error(desc)
+            ret_val = Verification._verification_message(
+                response_gln="",
+                correlation_id="",
+                verified=False,
+                reason=Verification.VERIFICATION_CODE_GTIN_NOT_FOUND,
+                description=desc
+            )
+
+        return ret_val
 
     @staticmethod
     def verify(gtin: str, lot: str, serial_number: str, correlation_id: str, exp: str):
