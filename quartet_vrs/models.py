@@ -16,17 +16,40 @@ class GTINMap(models.Model):
     path = models.CharField(
         max_length=256,
         verbose_name=_("Path"),
-        help_text=_("The Sub Path of the VRS Service. For Example: If the URL path is http://vrs.qu4rtet.io/vrs, then the path is: /vrs"),
-        unique=False,
-        null=True
+        help_text=_("The Sub Path of the VRS Service. For Example: If the URL path is http://vrs.qu4rtet.io/vrs, then the path is: /vrs."
+                    " The compliant portion of the path, e.g. /verify/ or /checkConnectivity/ etc., is NOT required here, unless"
+                    " the path is NOT GS1 Compliant as indicated int 'GS1 Compliant' field below."),
+        null=True,
+        blank=True
     )
     host = models.CharField(
         max_length=256,
         verbose_name=_("Hostname"),
         help_text=_("The Hostname of the VRS Router. If the URL is https://vrs.qu4rtet.io, then the host is: vrs.qu4rtet.io."),
-        unique=True,
-        db_index=True,
         null=False
+    )
+    port = models.CharField(
+        max_length=10,
+        verbose_name=_("Port"),
+        help_text=_("Port Number to use when calling external VRS. NOTE: Port is NOT required when Port Number is 443 or 80"),
+        null=True,
+        blank=True
+    )
+    user_name = models.CharField(
+        max_length=100,
+        verbose_name=_("Username"),
+        help_text=_(
+            "The Username for the VRS Router."),
+        null=True,
+        blank = True
+    )
+    password = models.CharField(
+        max_length=100,
+        verbose_name=_("Password"),
+        help_text=_(
+            "The Password for the VRS Router."),
+        null=True,
+        blank=True
     )
     gs1_compliant = models.BooleanField(
         default=True,

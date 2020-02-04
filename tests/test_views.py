@@ -46,6 +46,14 @@ class ViewTest(APITestCase):
         self.invalid_gln = "0359767999914"
         self.log_gtin = '90000000000001'
 
+        self.external_gtin = "03066661234564"
+        self.external_request_gln = "0306666543210"
+        self.external_response_gln = "0306666543210"
+        self.external_serial_number = "1"
+        self.external_lot_number = "EXT400"
+        self.external_expiry_date = "20201231"
+        self.external_company_prefix = "306666"
+
         user = User.objects.create_superuser(username='testuser',
                                         password='unittest',
                                         email='testuser@seriallab.local')
@@ -65,8 +73,16 @@ class ViewTest(APITestCase):
         mixer.blend(GTINMap, gtin = "00000000000001",
             host="test.qu4rtet.io",
             path="/vrs",
-            gs1_complian=True,
+            gs1_compliant=True,
             use_ssl=True)
+
+        mixer.blend(GTINMap, gtin=self.external_gtin,
+                    host="accenture.qu4rtet.io",
+                    path="/vrs",
+                    gs1_compliant=True,
+                    use_ssl=True,
+                    user_name='chuck.sailer',
+                    password='!Zsed456')
 
         # Get the test data file
         dir = os.path.dirname(os.path.abspath(__file__))
@@ -172,6 +188,32 @@ class ViewTest(APITestCase):
         self.assertEquals(log_entry.gtin, self.gtin)
         self.assertEquals(log_entry.lot, self.lot_number)
         self.assertEquals(log_entry.serial_number, self.serial_number)
+
+    def test_external_vrs_verification(self):
+        corrID = str(uuid.uuid4())
+
+        user = User.objects.get(username='testuser')
+        client = APIClient()
+        client.force_authenticate(user=user)
+
+        url = reverse('verify', kwargs=
+        {'gtin': self.external_gtin,
+         'lot': self.external_lot_number,
+         'serial_number': self.external_serial_number
+         })
+        url += "?exp={0}&corrUUID={1}".format(self.external_expiry_date, corrID)
+
+        response = client.get(url)
+
+        self.assertEquals(response.status_code, 200)
+        msg = response.data
+
+        self.assertEquals(msg["responderGLN"], self.external_response_gln)
+        self.assertIsNotNone(msg["location"])
+        self.assertIsNotNone(msg["verificationTimestamp"])
+
+        data = msg["data"]
+        self.assertEquals(data["verified"], True)
 
     def test_verify_unverified(self):
 

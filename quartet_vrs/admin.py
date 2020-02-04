@@ -13,11 +13,17 @@
 #
 # Copyright 2018 SerialLab Corp.  All rights reserved.
 from django.contrib import admin
+from django import forms
+
 from quartet_vrs import models
+
+class GTINMapForm(forms.ModelForm):
+    password = forms.CharField(max_length=100, widget=forms.PasswordInput(render_value=True))
 
 @admin.register(models.GTINMap)
 class GTINMapAdmin(admin.ModelAdmin):
-    list_display = ('gtin', 'host', 'path', 'gs1_compliant', 'use_ssl')
+    form = GTINMapForm
+    list_display = ('gtin', 'host', 'port', 'path', 'gs1_compliant', 'use_ssl')
     ordering = ('gtin',)
     search_fields = ['gtin',]
 

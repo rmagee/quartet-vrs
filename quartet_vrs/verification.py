@@ -13,6 +13,11 @@
 #
 # Copyright 2019 SerialLab Corp.  All rights reserved.
 import traceback
+import json
+import urllib.parse
+import requests
+from requests.auth import HTTPBasicAuth
+import posixpath
 import uuid
 import logging
 from rest_framework import status
@@ -20,7 +25,7 @@ from rest_framework.response import Response
 from EPCPyYes.core.v1_2 import helpers
 from quartet_epcis.db_api.queries import EPCISDBProxy
 from quartet_masterdata.models import TradeItem, Company
-from quartet_vrs.models import RequestLog, GTINMap
+from quartet_vrs.models import GTINMap
 
 logger = logging.getLogger(__name__)
 
@@ -102,14 +107,9 @@ class Verification():
             response_gln = trade_item.company.GLN13
         except TradeItem.DoesNotExist:
             try:
-                #result = Conductor().resolve_ex(gtin)
-                ret_val = Verification._verification_message(
-                    response_gln=response_gln,
-                    correlation_id=correlation_id,
-                    verified=False,
-                    reason=Verification.VERIFICATION_CODE_GTIN_NOT_REGISTERED,
-                    location=""
-                )
+                # The TradeItem is not in master data. Send to a Remote VRS
+                logger.info('Contacting External VRS')
+                return Verification._verify_external(gtin, lot, serial_number, correlation_id, exp)
             except:
                 tb = traceback.format_exc()
                 logger.error(tb)
@@ -227,12 +227,68 @@ class Verification():
         return ret_val
 
     @staticmethod
+    def _verify_external(gtin: str, lot: str, serial_number: str, correlation_id: str, exp: str):
+
+        try:
+            map = GTINMap.objects.get(gtin=gtin)
+            if map.use_ssl:
+                protocol = "https://"
+            else:
+                protocol = "http://"
+
+            if map.port is not None and map.port != "443" and map.port != "80":
+                host = "{0}{1}:{2}".format(protocol, map.host, map.port)
+            else:
+                host = "{0}{1}".format(protocol, map.host)
+
+            path = posixpath.join(map.path,
+                                  "verify/gtin/{0}/lot/{1}/ser/{2}?exp={3}".format(gtin, lot, serial_number, exp))
+
+            logger.info('Verifing using External VRS at {0}'.format(host))
+            url = urllib.parse.urljoin(host, path)
+
+            if map.user_name is not None:
+                response = requests.get(url, auth=HTTPBasicAuth(map.user_name, map.password))
+            else:
+                response = requests.get(url)
+            if response.status_code != status.HTTP_200_OK:
+               raise Exception(response.content)
+
+            ret_val = response.json()
+            # Add the external VRS host
+            ret_val['location'] = map.host
+
+        except GTINMap.DoesNotExist:
+            desc = 'GTIN: {0} is not mapped to an external VRS'.format(gtin)
+            logger.error(desc)
+            ret_val = Verification._verification_message(
+                response_gln="",
+                correlation_id=correlation_id,
+                verified=False,
+                reason=Verification.VERIFICATION_CODE_GTIN_NOT_FOUND,
+                description=desc
+            )
+        except Exception as e:
+            desc = 'Unable to verify GTIN: {0} using external VRS at {0}'.format(gtin, host)
+            logger.error(desc)
+            ret_val = Verification._verification_message(
+                response_gln="",
+                correlation_id=correlation_id,
+                verified=False,
+                reason=Verification.VERIFICATION_CODE_GTIN_NOT_FOUND,
+                description=desc
+            )
+
+        return ret_val
+
+    @staticmethod
     def _verification_message(response_gln: str,
                               correlation_id: str = "",
                               verified: bool = True,
                               reason: str = VERIFICATION_CODE_NO_REASON,
                               additional_info: bool = False,
-                              location:str=''):
+                              location:str='',
+                              description:str=''):
         '''
         Static Method that builds a Verification Message, with or without Additional Information.
         :param correlation_id: Correlation UUID provided by Requestor
@@ -280,10 +336,13 @@ class Verification():
                         "verificationFailureReason": reason,
                         "additionalInfo": "recalled"  # Only additional info in the Light Weight Message Spec v1.0.2
                     },
-                    "corrUUID": correlation_id
+                    "corrUUID": correlation_id,
+
                 }
             if len(location) > 0:
                 ret_val['location'] = location
+            if len(description) > 0:
+                ret_val["description"] = description
         return ret_val
 
     @staticmethod
