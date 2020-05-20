@@ -13,6 +13,11 @@
 #
 # Copyright 2019 SerialLab Corp.  All rights reserved.
 import traceback
+import json
+import urllib.parse
+import requests
+from requests.auth import HTTPBasicAuth
+import posixpath
 import uuid
 import logging
 from rest_framework import status
@@ -20,7 +25,7 @@ from rest_framework.response import Response
 from EPCPyYes.core.v1_2 import helpers
 from quartet_epcis.db_api.queries import EPCISDBProxy
 from quartet_masterdata.models import TradeItem, Company
-
+from quartet_vrs.models import GTINMap
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +36,8 @@ class Verification():
     VERIFICATION_CODE_GTIN_SERIAL_LOT = "No_match_GTIN_Serial_Lot"
     VERIFICATION_CODE_GTIN_SERIAL_EXPIRY = "No_match_GTIN_Serial_Expiry"
     VERIFICATION_CODE_NO_REASON = "No_reason_provided"
+    VERIFICATION_CODE_GTIN_NOT_REGISTERED = "GTIN_not_registered"
+    VERIFICATION_CODE_GTIN_NOT_FOUND = "GTIN_not_found"
 
     @staticmethod
     def check_connectivity(gtin: str, req_gln: str, context: str="dscsaSaleableReturn"):
@@ -48,8 +55,8 @@ class Verification():
         try:
             ret_val = None
             try:
-                Company.objects.get(GLN13=req_gln)
                 TradeItem.objects.get(GTIN14=gtin)
+                Company.objects.get(GLN13=req_gln)
                 ret_val = Response(
                     {
                         "responderGLN": req_gln},
@@ -57,15 +64,19 @@ class Verification():
                         content_type="application/json"
                     )
             except Company.DoesNotExist:
-                logger.error('qu4rtet_vrs.checkConnectivity().\r\n The reqGLN was not found and could not be verified. GLN : %s.' % req_gln)
-                ret_val = Response(data='The reqGLN was not found and could not be verified.', status=status.HTTP_401_UNAUTHORIZED, content_type="application/json")
+                msg = 'qu4rtet_vrs.checkConnectivity().\r\n The reqGLN was not found and could not be verified. GLN : %s.' % req_gln
+                logger.error(msg)
+                ret_val = Response(data=msg, status=status.HTTP_401_UNAUTHORIZED, content_type="application/json")
             except TradeItem.DoesNotExist:
-                logger.error('qu4rtet_vrs.checkConnectivity().\r\n The GTIN-14 was not found and could not be verified. GTIN-14 : %s.' % gtin)
-                ret_val = Response(data='The GTIN-14 was not found and could not be verified.',status=status.HTTP_401_UNAUTHORIZED, content_type="application/json")
+                try:
+                    response = Verification._check_connectivity_external(gtin, req_gln)
+                    ret_val = Response(data=response,status=status.HTTP_200_OK, content_type="application/json")
+                except Exception as e:
+                    logger.error('qu4rtet_vrs.checkConnectivity().\r\n The GTIN-14 was not found and could not be verified. GTIN-14 : %s.' % gtin)
+                    ret_val = Response(data='The GTIN-14 was not found and could not be verified.',status=status.HTTP_401_UNAUTHORIZED, content_type="application/json")
             except Exception as e:
                 logger.error('qu4rtet_vrs.checkConnectivity().\r\n Unexpected Error : %s.' % str(e))
                 ret_val = Response(status=status.HTTP_401_UNAUTHORIZED, content_type="application/json")
-
         except Exception:
             # Unexpected error, return HTTP 500 Server Error and log the exception
             data = traceback.format_exc()
@@ -73,8 +84,62 @@ class Verification():
             ret_val = Response({"error": "A Server Error occurred servicing this request"},
                                status.HTTP_500_INTERNAL_SERVER_ERROR, content_type="application/json")
         finally:
-            # Return Response
             return ret_val
+
+    @staticmethod
+    def _check_connectivity_external(gtin: str, req_gln: str, context: str = "dscsaSaleableReturn"):
+
+        try:
+            map = GTINMap.objects.get(gtin=gtin)
+            if map.use_ssl:
+                protocol = "https://"
+            else:
+                protocol = "http://"
+
+            if map.port is not None and map.port != "443" and map.port != "80":
+                host = "{0}{1}:{2}".format(protocol, map.host, map.port)
+            else:
+                host = "{0}{1}".format(protocol, map.host)
+
+            path = posixpath.join(map.path,
+                                  "checkConnectivity?gtin={0}&reqGLN={1}".format(gtin, req_gln))
+
+            logger.info('checkConnectivity using External VRS at {0}'.format(host))
+            url = urllib.parse.urljoin(host, path)
+
+            if map.user_name is not None:
+                response = requests.get(url, auth=HTTPBasicAuth(map.user_name, map.password))
+            else:
+                response = requests.get(url)
+            if response.status_code != status.HTTP_200_OK:
+               raise Exception(response.content)
+
+            ret_val = response.json()
+            # Add the external VRS host
+            ret_val['location'] = map.host
+
+        except GTINMap.DoesNotExist:
+            desc = 'GTIN: {0} is not mapped to an external VRS'.format(gtin)
+            logger.error(desc)
+            ret_val = Verification._verification_message(
+                response_gln="",
+                correlation_id="",
+                verified=False,
+                reason=Verification.VERIFICATION_CODE_GTIN_NOT_FOUND,
+                description=desc
+            )
+        except Exception as e:
+            desc = 'Unable to verify GTIN: {0} using external VRS at {0}'.format(gtin, host)
+            logger.error(desc)
+            ret_val = Verification._verification_message(
+                response_gln="",
+                correlation_id="",
+                verified=False,
+                reason=Verification.VERIFICATION_CODE_GTIN_NOT_FOUND,
+                description=desc
+            )
+
+        return ret_val
 
     @staticmethod
     def verify(gtin: str, lot: str, serial_number: str, correlation_id: str, exp: str):
@@ -99,9 +164,26 @@ class Verification():
             trade_item = TradeItem.objects.select_related().get(GTIN14=gtin)
             company_prefix = trade_item.company.gs1_company_prefix
             response_gln = trade_item.company.GLN13
+        except TradeItem.DoesNotExist:
+            try:
+                # The TradeItem is not in master data. Send to a Remote VRS
+                logger.info('Contacting External VRS')
+                return Verification._verify_external(gtin, lot, serial_number, correlation_id, exp)
+            except:
+                tb = traceback.format_exc()
+                logger.error(tb)
+                # Build Response
+                ret_val = Verification._verification_message(
+                    response_gln=response_gln,
+                    correlation_id=correlation_id,
+                    verified=False,
+                    reason=Verification.VERIFICATION_CODE_GTIN_NOT_FOUND
+                )
+
         except Exception:
             # Whatever Exception happens here, the GTIN was not found.
             # Log Exception
+
             tb = traceback.format_exc()
             logger.error(tb)
             # Build Response
@@ -122,8 +204,8 @@ class Verification():
             db_proxy = EPCISDBProxy()
             # If events are returned, consider GTIN and Serial Number Verified
             try:
-                events = None
                 events = db_proxy.get_events_by_entry_identifer(entry_identifier=epc)
+
                 if len(events) == 0:
                     # No events means GTIN & Serial Number could not be verified
                     ret_val = Verification._verification_message(
@@ -204,11 +286,68 @@ class Verification():
         return ret_val
 
     @staticmethod
+    def _verify_external(gtin: str, lot: str, serial_number: str, correlation_id: str, exp: str):
+
+        try:
+            map = GTINMap.objects.get(gtin=gtin)
+            if map.use_ssl:
+                protocol = "https://"
+            else:
+                protocol = "http://"
+
+            if map.port is not None and map.port != "443" and map.port != "80":
+                host = "{0}{1}:{2}".format(protocol, map.host, map.port)
+            else:
+                host = "{0}{1}".format(protocol, map.host)
+
+            path = posixpath.join(map.path,
+                                  "verify/gtin/{0}/lot/{1}/ser/{2}?exp={3}".format(gtin, lot, serial_number, exp))
+
+            logger.info('Verifing using External VRS at {0}'.format(host))
+            url = urllib.parse.urljoin(host, path)
+
+            if map.user_name is not None:
+                response = requests.get(url, auth=HTTPBasicAuth(map.user_name, map.password))
+            else:
+                response = requests.get(url)
+            if response.status_code != status.HTTP_200_OK:
+               raise Exception(response.content)
+
+            ret_val = response.json()
+            # Add the external VRS host
+            ret_val['location'] = map.host
+
+        except GTINMap.DoesNotExist:
+            desc = 'GTIN: {0} is not mapped to an external VRS'.format(gtin)
+            logger.error(desc)
+            ret_val = Verification._verification_message(
+                response_gln="",
+                correlation_id=correlation_id,
+                verified=False,
+                reason=Verification.VERIFICATION_CODE_GTIN_NOT_FOUND,
+                description=desc
+            )
+        except Exception as e:
+            desc = 'Unable to verify GTIN: {0} using external VRS at {0}'.format(gtin, host)
+            logger.error(desc)
+            ret_val = Verification._verification_message(
+                response_gln="",
+                correlation_id=correlation_id,
+                verified=False,
+                reason=Verification.VERIFICATION_CODE_GTIN_NOT_FOUND,
+                description=desc
+            )
+
+        return ret_val
+
+    @staticmethod
     def _verification_message(response_gln: str,
                               correlation_id: str = "",
                               verified: bool = True,
                               reason: str = VERIFICATION_CODE_NO_REASON,
-                              additional_info: bool = False):
+                              additional_info: bool = False,
+                              location:str='',
+                              description:str=''):
         '''
         Static Method that builds a Verification Message, with or without Additional Information.
         :param correlation_id: Correlation UUID provided by Requestor
@@ -256,8 +395,13 @@ class Verification():
                         "verificationFailureReason": reason,
                         "additionalInfo": "recalled"  # Only additional info in the Light Weight Message Spec v1.0.2
                     },
-                    "corrUUID": correlation_id
+                    "corrUUID": correlation_id,
+
                 }
+            if len(location) > 0:
+                ret_val['location'] = location
+            if len(description) > 0:
+                ret_val["description"] = description
         return ret_val
 
     @staticmethod

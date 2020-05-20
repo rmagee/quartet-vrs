@@ -1,0 +1,25 @@
+VRS Test Cases
+
+Case #1 - Verify GTIN
+The Company Prefix, GLN, and Trade Item are configured in the Masterdata of the Local QU4RTET System.
+The GTIN, Lot, Expiry, and Serial Number are in the QU4RTET EPCIS Repository as part of an EPCIS Event.
+Expected Result:
+GTIN is Verified
+
+Case #2 - Verify GTIN
+The Company Prefix, GLN, and Trade Item are configured in the Masterdata of the Local QU4RTET System.
+The GTIN, Lot, Expiry, and Serial Number are NOT in the QU4RTET EPCIS Repository as part of an EPCIS Event.
+Expected Result:
+GTIN is NOT Verified
+
+
+Case #3 - Verify GTIN
+The Company Prefix, GLN, and Trade Item are NOT configured in the Masterdata of the Local QU4RTET System. However, the
+GTIN is configured in the GTIN Map with a URL and Path pointing to an external VRS.
+
+Expected Result:
+The External VRS is contacted to verify the GTIN. Verification depends on
+the External VRS
+
+
+
