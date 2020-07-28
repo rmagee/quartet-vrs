@@ -24,6 +24,8 @@ from rest_framework import viewsets
 from .serializers import GTINMapSerializer
 from .verification import Verification
 from quartet_masterdata.models import Company
+from drf_yasg import openapi
+from drf_yasg.utils import swagger_auto_schema
 
 from .models import GTINMap, RequestLog
 
@@ -33,6 +35,25 @@ logger = logging.getLogger(__name__)
 class CheckConnectivityView(APIView):
     queryset = Company.objects.none()
 
+    gtin_param = openapi.Parameter(
+        'gtin', openapi.IN_QUERY,
+        description='The GLN',
+        type=openapi.TYPE_STRING
+    )
+    gln_param = openapi.Parameter(
+        'reqGLN', openapi.IN_QUERY,
+        description='The Requestor GLN',
+        type=openapi.TYPE_STRING
+    )
+    context_param = openapi.Parameter(
+        'context', openapi.IN_QUERY,
+        description='The Context of the Request default is dscsaSaleableReturn',
+        type=openapi.TYPE_STRING
+    )
+
+    @swagger_auto_schema(
+        manual_parameters=[gtin_param, gln_param, context_param]
+    )
     def get(self, request):
         '''
          The checkConnectivity method enables a check of connectivity with the QU4RTET verification service and returns
@@ -47,18 +68,20 @@ class CheckConnectivityView(APIView):
          :param request: HTTP Request
          :return: respone: HTTP Response
         '''
-        success=False
+        success = False
         gtin = request.GET.get('gtin', '')
         reqGLN = request.GET.get('reqGLN', '')
         context = request.GET.get('context', 'dscsaSaleableReturn')
 
-        ret_val = Verification.check_connectivity(gtin=gtin, req_gln=reqGLN, context=context)
+        ret_val = Verification.check_connectivity(gtin=gtin, req_gln=reqGLN,
+                                                  context=context)
         try:
             gln = ret_val.data['responderGLN']
             success = gln is not None
         except:
             pass
-        RequestLogger.log(request, response=ret_val, operation='checkConnectivity', success=success)
+        RequestLogger.log(request, response=ret_val,
+                          operation='checkConnectivity', success=success)
 
         return ret_val
 
@@ -115,7 +138,8 @@ class VerifyView(APIView):
 
         finally:
             # Log Request
-            RequestLogger.log(request, response=ret_val, operation='verify', success=success)
+            RequestLogger.log(request, response=ret_val, operation='verify',
+                              success=success)
             # return built response
             return ret_val
 
@@ -197,23 +221,23 @@ class RequestLogger(object):
         try:
             expiry = request.query_params['exp']
         except:
-            expiry=None
+            expiry = None
         try:
             request_gln = request.query_params['reqGLN']
         except:
-            request_gln=None
+            request_gln = None
         try:
             corr_uuid = request.query_params['corrUUID']
         except:
-            corr_uuid=None
+            corr_uuid = None
         try:
             kwargs = request.parser_context['kwargs']
         except:
-            kwargs=None
+            kwargs = None
         try:
             gtin = kwargs['gtin']
         except:
-            gtin=None
+            gtin = None
         try:
             lot = kwargs['lot']
         except:
@@ -221,17 +245,16 @@ class RequestLogger(object):
         try:
             serial_number = kwargs['serial_number']
         except:
-            serial_number=None
+            serial_number = None
         try:
             user_name = request.user.username
         except:
-            user_name=None
+            user_name = None
 
         if hasattr(response, 'data'):
             resp = json.dumps(response.data)
         else:
             resp = json.dumps(response)
-
 
         # create log entry
         try:
@@ -252,6 +275,7 @@ class RequestLogger(object):
             # will not throw, just log
             tb = traceback.format_exc()
             logger.error(tb)
+
 
 def get_client_ip(request):
     x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
