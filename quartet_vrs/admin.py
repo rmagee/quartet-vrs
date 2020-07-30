@@ -36,7 +36,25 @@ class RequestLogAdmin(admin.ModelAdmin):
                        'request_gln', 'corr_uuid', 'response', 'operation',
                        'serial_number','user_name', 'success']
 
+class CompanyAccessAdmin(admin.ModelAdmin):
+    def get_gln(self, company_access):
+        return company_access.company.GLN13
+    get_gln.short_description = 'Company GLN'
+    get_gln.admin_order_field = 'company__GLN13'
+
+    def get_responder_gln(self, responder):
+        return responder.company.GLN13
+    get_responder_gln.short_description = 'Responder GLN'
+    get_responder_gln.admin_order_field = 'responder__GLN13'
+
+    list_display = ['company', 'get_gln', 'access_granted',
+                    'responder', 'get_responder_gln']
+    ordering = ['company__name']
+    search_fields = ['company__name', 'company__GLN13',
+                    'responder']
+
 
 def register_to_site(admin_site):
     admin_site.register(models.GTINMap, GTINMapAdmin)
     admin_site.register(models.RequestLog, RequestLogAdmin)
+    admin_site.register(models.CompanyAccess, CompanyAccessAdmin)

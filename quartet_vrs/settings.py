@@ -16,7 +16,7 @@ import pprint
 
 env = environ.Env(
     DEBUG=(bool, False),
-    SECRET_KEY=(str, ''),
+    SECRET_KEY=(str, 'SECRET_KEY = "u_6k^p*oqxbq*h+sbm(kc=iqw&vk6_@gp#!d%p=zqh7a&(^=_o"'),
 )
 # reading .env file
 environ.Env.read_env()
@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'quartet_masterdata'
 
 ]
 

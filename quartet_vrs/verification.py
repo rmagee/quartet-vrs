@@ -25,7 +25,9 @@ from rest_framework.response import Response
 from EPCPyYes.core.v1_2 import helpers
 from quartet_epcis.db_api.queries import EPCISDBProxy
 from quartet_masterdata.models import TradeItem, Company
-from quartet_vrs.models import GTINMap
+from quartet_vrs.models import GTINMap, CompanyAccess
+from rest_framework import exceptions
+from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +42,8 @@ class Verification():
     VERIFICATION_CODE_GTIN_NOT_FOUND = "GTIN_not_found"
 
     @staticmethod
-    def check_connectivity(gtin: str, req_gln: str, context: str="dscsaSaleableReturn"):
+    def check_connectivity(gtin: str, req_gln: str,
+                           context: str = "dscsaSaleableReturn"):
         """
                    The checkConnectivity method enables a check of connectivity with the QU4RTET verification service and returns
                    the appropriate HTTP status code. If the Requestor GLN (reqGLN) is not recognized, QU4RTET verification service will
@@ -51,43 +54,39 @@ class Verification():
                    :param gtin: GS1 GTIN 14
                    :param context: Default is dscsaSaleableReturn
             """
-        logger.debug("Entering quartet_vrs.check_connectivity()")
         try:
-            ret_val = None
-            try:
-                TradeItem.objects.get(GTIN14=gtin)
-                Company.objects.get(GLN13=req_gln)
-                ret_val = Response(
-                    {
-                        "responderGLN": req_gln},
-                        status=status.HTTP_200_OK,
-                        content_type="application/json"
+            company_access = CompanyAccess.objects.get(company__GLN13=req_gln)
+            gtin = TradeItem.objects.get(GTIN14=gtin)
+            if not company_access.access_granted:
+                raise exceptions.AuthenticationFailed(
+                    'The GLN %s does not have access to query this system.'
+                    % req_gln, 403)
+            if company_access.responder:
+                responder_gln = company_access.responder.GLN13
+            else:
+                responder_gln = getattr(settings, 'DEFAULT_VRS_RESPONDER_GLN',
+                                        None)
+                if not responder_gln:
+                    raise exceptions.APIException(
+                        'Please configure a default responder for '
+                        'the system and/or configure a responder '
+                        'GLN for the company with GLN %s.' %
+                        req_gln, status=500
                     )
-            except Company.DoesNotExist:
-                msg = 'qu4rtet_vrs.checkConnectivity().\r\n The reqGLN was not found and could not be verified. GLN : %s.' % req_gln
-                logger.error(msg)
-                ret_val = Response(data=msg, status=status.HTTP_401_UNAUTHORIZED, content_type="application/json")
-            except TradeItem.DoesNotExist:
-                try:
-                    response = Verification._check_connectivity_external(gtin, req_gln)
-                    ret_val = Response(data=response,status=status.HTTP_200_OK, content_type="application/json")
-                except Exception as e:
-                    logger.error('qu4rtet_vrs.checkConnectivity().\r\n The GTIN-14 was not found and could not be verified. GTIN-14 : %s.' % gtin)
-                    ret_val = Response(data='The GTIN-14 was not found and could not be verified.',status=status.HTTP_401_UNAUTHORIZED, content_type="application/json")
-            except Exception as e:
-                logger.error('qu4rtet_vrs.checkConnectivity().\r\n Unexpected Error : %s.' % str(e))
-                ret_val = Response(status=status.HTTP_401_UNAUTHORIZED, content_type="application/json")
-        except Exception:
-            # Unexpected error, return HTTP 500 Server Error and log the exception
-            data = traceback.format_exc()
-            logger.error('Exception in qu4rtet_vrs.checkConnectivity().\r\n%s' % data)
-            ret_val = Response({"error": "A Server Error occurred servicing this request"},
-                               status.HTTP_500_INTERNAL_SERVER_ERROR, content_type="application/json")
-        finally:
-            return ret_val
+            return responder_gln
+        except CompanyAccess.DoesNotExist:
+            raise exceptions.NotAuthenticated(
+                'The GLN %s is not configured for access.' % req_gln, 401)
+        except TradeItem.DoesNotExist:
+            raise exceptions.APIException(
+                'The GTIN %s is not available for query on '
+                'this system.' % gtin,
+                404
+            )
 
     @staticmethod
-    def _check_connectivity_external(gtin: str, req_gln: str, context: str = "dscsaSaleableReturn"):
+    def _check_connectivity_external(gtin: str, req_gln: str,
+                                     context: str = "dscsaSaleableReturn"):
 
         try:
             map = GTINMap.objects.get(gtin=gtin)
@@ -102,17 +101,20 @@ class Verification():
                 host = "{0}{1}".format(protocol, map.host)
 
             path = posixpath.join(map.path,
-                                  "checkConnectivity?gtin={0}&reqGLN={1}".format(gtin, req_gln))
+                                  "checkConnectivity?gtin={0}&reqGLN={1}".format(
+                                      gtin, req_gln))
 
-            logger.info('checkConnectivity using External VRS at {0}'.format(host))
+            logger.info(
+                'checkConnectivity using External VRS at {0}'.format(host))
             url = urllib.parse.urljoin(host, path)
 
             if map.user_name is not None:
-                response = requests.get(url, auth=HTTPBasicAuth(map.user_name, map.password))
+                response = requests.get(url, auth=HTTPBasicAuth(map.user_name,
+                                                                map.password))
             else:
                 response = requests.get(url)
             if response.status_code != status.HTTP_200_OK:
-               raise Exception(response.content)
+                raise Exception(response.content)
 
             ret_val = response.json()
             # Add the external VRS host
@@ -129,7 +131,8 @@ class Verification():
                 description=desc
             )
         except Exception as e:
-            desc = 'Unable to verify GTIN: {0} using external VRS at {0}'.format(gtin, host)
+            desc = 'Unable to verify GTIN: {0} using external VRS at {0}'.format(
+                gtin, host)
             logger.error(desc)
             ret_val = Verification._verification_message(
                 response_gln="",
@@ -142,7 +145,8 @@ class Verification():
         return ret_val
 
     @staticmethod
-    def verify(gtin: str, lot: str, serial_number: str, correlation_id: str, exp: str):
+    def verify(gtin: str, lot: str, serial_number: str, correlation_id: str,
+               exp: str):
         '''
         Static Method used to Verify GTIN-14, Lot, and Serial Number
         :param gtin: GS1 GTIN-14
@@ -168,7 +172,8 @@ class Verification():
             try:
                 # The TradeItem is not in master data. Send to a Remote VRS
                 logger.info('Contacting External VRS')
-                return Verification._verify_external(gtin, lot, serial_number, correlation_id, exp)
+                return Verification._verify_external(gtin, lot, serial_number,
+                                                     correlation_id, exp)
             except:
                 tb = traceback.format_exc()
                 logger.error(tb)
@@ -198,13 +203,17 @@ class Verification():
             # Transform the GTIN into an EPC URN Id
             indicator_digit = gtin[0]
             item_ref = gtin[len(company_prefix) + 1: -1]
-            epc = "urn:epc:id:sgtin:{0}.{1}{2}.{3}".format(company_prefix, indicator_digit, item_ref, serial_number)
+            epc = "urn:epc:id:sgtin:{0}.{1}{2}.{3}".format(company_prefix,
+                                                           indicator_digit,
+                                                           item_ref,
+                                                           serial_number)
 
             # Search Repo for EPC, Serial Number, Lot, Expiry
             db_proxy = EPCISDBProxy()
             # If events are returned, consider GTIN and Serial Number Verified
             try:
-                events = db_proxy.get_events_by_entry_identifer(entry_identifier=epc)
+                events = db_proxy.get_events_by_entry_identifer(
+                    entry_identifier=epc)
 
                 if len(events) == 0:
                     # No events means GTIN & Serial Number could not be verified
@@ -234,7 +243,8 @@ class Verification():
                         if not lot_matched and md.value == lot:
                             # Lot Found
                             lot_matched = True
-                        if not exp_matched and Verification._format_exp_date(md.value) == exp:
+                        if not exp_matched and Verification._format_exp_date(
+                            md.value) == exp:
                             # Expiry Found
                             exp_matched = True
                         if exp_matched and lot_matched:
@@ -286,7 +296,8 @@ class Verification():
         return ret_val
 
     @staticmethod
-    def _verify_external(gtin: str, lot: str, serial_number: str, correlation_id: str, exp: str):
+    def _verify_external(gtin: str, lot: str, serial_number: str,
+                         correlation_id: str, exp: str):
 
         try:
             map = GTINMap.objects.get(gtin=gtin)
@@ -301,17 +312,19 @@ class Verification():
                 host = "{0}{1}".format(protocol, map.host)
 
             path = posixpath.join(map.path,
-                                  "verify/gtin/{0}/lot/{1}/ser/{2}?exp={3}".format(gtin, lot, serial_number, exp))
+                                  "verify/gtin/{0}/lot/{1}/ser/{2}?exp={3}".format(
+                                      gtin, lot, serial_number, exp))
 
             logger.info('Verifing using External VRS at {0}'.format(host))
             url = urllib.parse.urljoin(host, path)
 
             if map.user_name is not None:
-                response = requests.get(url, auth=HTTPBasicAuth(map.user_name, map.password))
+                response = requests.get(url, auth=HTTPBasicAuth(map.user_name,
+                                                                map.password))
             else:
                 response = requests.get(url)
             if response.status_code != status.HTTP_200_OK:
-               raise Exception(response.content)
+                raise Exception(response.content)
 
             ret_val = response.json()
             # Add the external VRS host
@@ -328,7 +341,8 @@ class Verification():
                 description=desc
             )
         except Exception as e:
-            desc = 'Unable to verify GTIN: {0} using external VRS at {0}'.format(gtin, host)
+            desc = 'Unable to verify GTIN: {0} using external VRS at {0}'.format(
+                gtin, host)
             logger.error(desc)
             ret_val = Verification._verification_message(
                 response_gln="",
@@ -346,8 +360,8 @@ class Verification():
                               verified: bool = True,
                               reason: str = VERIFICATION_CODE_NO_REASON,
                               additional_info: bool = False,
-                              location:str='',
-                              description:str=''):
+                              location: str = '',
+                              description: str = ''):
         '''
         Static Method that builds a Verification Message, with or without Additional Information.
         :param correlation_id: Correlation UUID provided by Requestor
@@ -370,7 +384,8 @@ class Verification():
                     "responderGLN": response_gln,
                     "data": {
                         "verified": verified,
-                        "additionalInfo": "recalled"  # Only additional info in the Light Weight Message Spec v1.0.2
+                        "additionalInfo": "recalled"
+                        # Only additional info in the Light Weight Message Spec v1.0.2
                     },
                     "corrUUID": correlation_id
                 }
@@ -393,7 +408,8 @@ class Verification():
                     "data": {
                         "verified": verified,
                         "verificationFailureReason": reason,
-                        "additionalInfo": "recalled"  # Only additional info in the Light Weight Message Spec v1.0.2
+                        "additionalInfo": "recalled"
+                        # Only additional info in the Light Weight Message Spec v1.0.2
                     },
                     "corrUUID": correlation_id,
 
@@ -406,7 +422,7 @@ class Verification():
 
     @staticmethod
     def _format_exp_date(date):
-        return date.replace('-','')
+        return date.replace('-', '')
         if date.find("-") > 0:
             prts = date.split("-")
             if len(prts[0]) == 4:
@@ -414,6 +430,3 @@ class Verification():
             return "{0}{1}{2}".format(prts[0], prts[1], prts[2])
         else:
             return date
-
-
-

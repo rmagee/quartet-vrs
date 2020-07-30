@@ -1,6 +1,6 @@
 from django.db import models
 from django.utils.translation import gettext_lazy as _
-
+from quartet_masterdata.models import TradeItem, Company
 
 class GTINMap(models.Model):
     gtin = models.CharField(
@@ -64,6 +64,8 @@ class GTINMap(models.Model):
 
     class Meta:
         db_table = 'quartet_vrs_gtin_map'
+        verbose_name='Route'
+        verbose_name_plural='Routing Maps'
 
 
 class RequestLog(models.Model):
@@ -146,3 +148,32 @@ class RequestLog(models.Model):
 
     class Meta:
         db_table = 'quartet_vrs_request_log'
+        verbose_name='Verification Request'
+        verbose_name_plural='Verification Requests'
+
+class CompanyAccess(models.Model):
+    """
+    Grants a company access by GLN.
+    """
+    company = models.ForeignKey(
+        Company, on_delete=models.CASCADE,
+        help_text='A company as identified by its GLN.'
+    )
+    access_granted = models.BooleanField(
+        default=True,
+        help_text='Whether or not this company has query access.',
+        verbose_name='Access Granted'
+    )
+    responder = models.ForeignKey(
+        Company, on_delete=models.CASCADE,
+        help_text='The responder GLN for this company will be determined '
+                  ' by this mapping if not the system default.  Leave blank'
+                  ' to use the default responder in settings.',
+        verbose_name='Responder',
+        related_name='responder',
+        null=True,
+        blank=True
+    )
+    class Meta:
+        verbose_name='Query Access'
+        verbose_name_plural='Query Access'

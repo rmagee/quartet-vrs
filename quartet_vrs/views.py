@@ -52,7 +52,7 @@ class CheckConnectivityView(APIView):
     )
 
     @swagger_auto_schema(
-        manual_parameters=[gtin_param, gln_param, context_param]
+        manual_parameters=[gtin_param, gln_param, context_param],
     )
     def get(self, request):
         '''
@@ -73,17 +73,18 @@ class CheckConnectivityView(APIView):
         reqGLN = request.GET.get('reqGLN', '')
         context = request.GET.get('context', 'dscsaSaleableReturn')
 
-        ret_val = Verification.check_connectivity(gtin=gtin, req_gln=reqGLN,
+        responder_gln = Verification.check_connectivity(gtin=gtin, req_gln=reqGLN,
                                                   context=context)
+        response_data = {'responderGLN': responder_gln}
         try:
-            gln = ret_val.data['responderGLN']
+            gln = responder_gln
             success = gln is not None
         except:
             pass
-        RequestLogger.log(request, response=ret_val,
+        RequestLogger.log(request, response=str(response_data),
                           operation='checkConnectivity', success=success)
+        return Response(data=response_data)
 
-        return ret_val
 
 
 class VerifyView(APIView):
