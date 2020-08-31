@@ -12,27 +12,29 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 # Copyright 2019 SerialLab Corp.  All rights reserved.
-import traceback
-import json
-import urllib.parse
-import requests
-from requests.auth import HTTPBasicAuth
-import posixpath
-import uuid
 import logging
+import posixpath
+import traceback
+import urllib.parse
+import uuid
+
+import requests
+from dateutil.parser import parser
+from django.conf import settings
+from requests.auth import HTTPBasicAuth
+from rest_framework import exceptions
 from rest_framework import status
-from rest_framework.response import Response
+
 from EPCPyYes.core.v1_2 import helpers
 from quartet_epcis.db_api.queries import EPCISDBProxy
-from quartet_masterdata.models import TradeItem, Company
-from quartet_vrs.models import GTINMap, CompanyAccess
-from rest_framework import exceptions
-from django.conf import settings
+from quartet_masterdata.models import TradeItem
+from quartet_vrs.models import CompanyAccess
+from quartet_vrs.models import GTINMap
 
 logger = logging.getLogger(__name__)
 
 
-class Verification():
+class Verification:
     VERIFICATION_CODE_GTIN_SERIAL = "No_match_GTIN_Serial"
     VERIFICATION_CODE_GTIN_SERIAL_LOT_EXPIRY = "No_match_GTIN_Serial_Lot_Expiry"
     VERIFICATION_CODE_GTIN_SERIAL_LOT = "No_match_GTIN_Serial_Lot"
@@ -41,8 +43,11 @@ class Verification():
     VERIFICATION_CODE_GTIN_NOT_REGISTERED = "GTIN_not_registered"
     VERIFICATION_CODE_GTIN_NOT_FOUND = "GTIN_not_found"
 
-    @staticmethod
-    def check_connectivity(gtin: str, req_gln: str,
+    def __init__(self) -> None:
+        super().__init__()
+        self.parser = parser()
+
+    def check_connectivity(self, gtin: str, req_gln: str,
                            context: str = "dscsaSaleableReturn"):
         """
                    The checkConnectivity method enables a check of connectivity with the QU4RTET verification service and returns
@@ -84,8 +89,7 @@ class Verification():
                 404
             )
 
-    @staticmethod
-    def _check_connectivity_external(gtin: str, req_gln: str,
+    def _check_connectivity_external(self, gtin: str, req_gln: str,
                                      context: str = "dscsaSaleableReturn"):
 
         try:
@@ -123,7 +127,7 @@ class Verification():
         except GTINMap.DoesNotExist:
             desc = 'GTIN: {0} is not mapped to an external VRS'.format(gtin)
             logger.error(desc)
-            ret_val = Verification._verification_message(
+            ret_val = self._verification_message(
                 response_gln="",
                 correlation_id="",
                 verified=False,
@@ -134,7 +138,7 @@ class Verification():
             desc = 'Unable to verify GTIN: {0} using external VRS at {0}'.format(
                 gtin, host)
             logger.error(desc)
-            ret_val = Verification._verification_message(
+            ret_val = self._verification_message(
                 response_gln="",
                 correlation_id="",
                 verified=False,
@@ -144,9 +148,8 @@ class Verification():
 
         return ret_val
 
-    @staticmethod
-    def verify(gtin: str, lot: str, serial_number: str, correlation_id: str,
-               exp: str):
+    def verify(self, gtin: str, lot: str, serial_number: str, correlation_id: str,
+               exp: str, linkType: str, context: str, reqGLN):
         '''
         Static Method used to Verify GTIN-14, Lot, and Serial Number
         :param gtin: GS1 GTIN-14
@@ -162,29 +165,49 @@ class Verification():
         response_gln = None
         lot_matched = False
         exp_matched = False
+
+        if linkType and linkType != 'verificationService':
+            raise exceptions.APIException('An invalid linkType was specified '
+                                          'in the URl.',400)
+        if context and context != 'dscsaSaleableReturn':
+            raise exceptions.APIException('An invalid context was specified '
+                                          'in the URL', 400)
+
+        if not getattr(settings, 'VRS_ALLOW_ALL_REQ_GLNS', False):
+            ca = CompanyAccess.objects.filter(company__GLN13=reqGLN).exists()
+            if not ca:
+                raise exceptions.NotAuthenticated(
+                    'The reqGLN %s is not authorized to query this '
+                    'system.' % reqGLN, 401)
+            else:
+                ca = CompanyAccess.objects.get(company__GLN13 = reqGLN)
+                response_gln = ca.responder if ca.responder else \
+                    getattr(settings, 'DEFAULT_VRS_RESPONDER_GLN')
+
+
         if correlation_id is None or len(correlation_id) == 0:
             correlation_id = str(uuid.uuid4())
         try:
             trade_item = TradeItem.objects.select_related().get(GTIN14=gtin)
             company_prefix = trade_item.company.gs1_company_prefix
-            response_gln = trade_item.company.GLN13
+            if not response_gln:
+                response_gln = trade_item.company.GLN13
         except TradeItem.DoesNotExist:
             try:
                 # The TradeItem is not in master data. Send to a Remote VRS
                 logger.info('Contacting External VRS')
-                return Verification._verify_external(gtin, lot, serial_number,
+                return self._verify_external(gtin, lot, serial_number,
                                                      correlation_id, exp)
             except:
                 tb = traceback.format_exc()
                 logger.error(tb)
                 # Build Response
-                ret_val = Verification._verification_message(
+                ret_val = self._verification_message(
                     response_gln=response_gln,
                     correlation_id=correlation_id,
                     verified=False,
                     reason=Verification.VERIFICATION_CODE_GTIN_NOT_FOUND
                 )
-
         except Exception:
             # Whatever Exception happens here, the GTIN was not found.
             # Log Exception
@@ -192,7 +215,7 @@ class Verification():
             tb = traceback.format_exc()
             logger.error(tb)
             # Build Response
-            ret_val = Verification._verification_message(
+            ret_val = self._verification_message(
                 response_gln=response_gln,
                 correlation_id=correlation_id,
                 verified=False,
@@ -217,7 +240,7 @@ class Verification():
 
                 if len(events) == 0:
                     # No events means GTIN & Serial Number could not be verified
-                    ret_val = Verification._verification_message(
+                    ret_val = self._verification_message(
                         response_gln=response_gln,
                         correlation_id=correlation_id,
                         verified=False,
@@ -228,7 +251,7 @@ class Verification():
                 tb = traceback.format_exc()
                 logger.error(tb)
                 # Whatever the reason, the GTIN & Serial Number could not be verified
-                ret_val = Verification._verification_message(
+                ret_val = self._verification_message(
                     response_gln=response_gln,
                     correlation_id=correlation_id,
                     verified=False,
@@ -240,25 +263,18 @@ class Verification():
                 evt = db_proxy.get_event_by_id(event_id=event.event_id)
                 if hasattr(evt, 'ilmd'):
                     for md in evt.ilmd:
-                        if not lot_matched and md.value == lot:
-                            # Lot Found
+                        if md.name == "lotNumber" and md.value == lot:
                             lot_matched = True
-                        if not exp_matched and Verification._format_exp_date(
-                            md.value) == exp:
-                            # Expiry Found
-                            exp_matched = True
-                        if exp_matched and lot_matched:
-                            # Both Exp and Lot found, so exit the inner loop
-                            break
-                    if exp_matched and lot_matched:
-                        # Both Exp and Lot found, so exit the outer loop
-                        break
+                        elif md.name == 'itemExpirationDate':
+                            exp_matched = exp == self._format_exp_date(md.value)
+                if exp_matched and lot_matched:
+                    break
 
             if ret_val is None:
                 # GTIN & SerialNumber have matched
                 if exp_matched and lot_matched:
                     # GTIN, Serial, Lot, and Expiry all Verified.
-                    ret_val = Verification._verification_message(
+                    ret_val = self._verification_message(
                         response_gln=response_gln,
                         correlation_id=correlation_id
                     )
@@ -266,7 +282,7 @@ class Verification():
                 elif not exp_matched and not lot_matched:
                     # The Lot and/or Expiry could not be verified.
                     # The GTIN & Serial did not match the Lot and Expiry
-                    ret_val = Verification._verification_message(
+                    ret_val = self._verification_message(
                         response_gln=response_gln,
                         correlation_id=correlation_id,
                         verified=False,
@@ -276,17 +292,17 @@ class Verification():
                 elif not exp_matched and lot_matched:
                     # The Expiry could not be verified.
                     # The GTIN & Serial did not match the Expiry
-                    ret_val = Verification._verification_message(
+                    ret_val = self._verification_message(
                         response_gln=response_gln,
                         correlation_id=correlation_id,
                         verified=False,
-                        reason=Verification.VERIFICATION_CODE_GTIN_SERIAL_LOT
+                        reason=Verification.VERIFICATION_CODE_GTIN_SERIAL_EXPIRY
                     )
 
                 elif exp_matched and not lot_matched:
                     # The Lot could not be verified.
                     # The GTIN & Serial did not match the Lot
-                    ret_val = Verification._verification_message(
+                    ret_val = self._verification_message(
                         response_gln=response_gln,
                         correlation_id=correlation_id,
                         verified=False,
@@ -295,8 +311,8 @@ class Verification():
         # Return the Response
         return ret_val
 
-    @staticmethod
-    def _verify_external(gtin: str, lot: str, serial_number: str,
+
+    def _verify_external(self, gtin: str, lot: str, serial_number: str,
                          correlation_id: str, exp: str):
 
         try:
@@ -333,7 +349,7 @@ class Verification():
         except GTINMap.DoesNotExist:
             desc = 'GTIN: {0} is not mapped to an external VRS'.format(gtin)
             logger.error(desc)
-            ret_val = Verification._verification_message(
+            ret_val = self._verification_message(
                 response_gln="",
                 correlation_id=correlation_id,
                 verified=False,
@@ -344,7 +360,7 @@ class Verification():
             desc = 'Unable to verify GTIN: {0} using external VRS at {0}'.format(
                 gtin, host)
             logger.error(desc)
-            ret_val = Verification._verification_message(
+            ret_val = self._verification_message(
                 response_gln="",
                 correlation_id=correlation_id,
                 verified=False,
@@ -354,8 +370,7 @@ class Verification():
 
         return ret_val
 
-    @staticmethod
-    def _verification_message(response_gln: str,
+    def _verification_message(self, response_gln: str,
                               correlation_id: str = "",
                               verified: bool = True,
                               reason: str = VERIFICATION_CODE_NO_REASON,
@@ -420,13 +435,6 @@ class Verification():
                 ret_val["description"] = description
         return ret_val
 
-    @staticmethod
-    def _format_exp_date(date):
-        return date.replace('-', '')
-        if date.find("-") > 0:
-            prts = date.split("-")
-            if len(prts[0]) == 4:
-                prts[0] = prts[0][2:]
-            return "{0}{1}{2}".format(prts[0], prts[1], prts[2])
-        else:
-            return date
+    def _format_exp_date(self, date):
+        dt = self.parser.parse(date)
+        return dt.strftime('%y%m%d')

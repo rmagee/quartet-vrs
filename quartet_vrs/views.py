@@ -21,6 +21,7 @@ from rest_framework.response import Response
 import coreapi, coreschema
 from rest_framework.schemas import ManualSchema
 from rest_framework import viewsets
+from rest_framework import exceptions
 from .serializers import GTINMapSerializer
 from .verification import Verification
 from quartet_masterdata.models import Company
@@ -73,7 +74,7 @@ class CheckConnectivityView(APIView):
         reqGLN = request.GET.get('reqGLN', '')
         context = request.GET.get('context', 'dscsaSaleableReturn')
 
-        responder_gln = Verification.check_connectivity(gtin=gtin, req_gln=reqGLN,
+        responder_gln = Verification().check_connectivity(gtin=gtin, req_gln=reqGLN,
                                                   context=context)
         response_data = {'responderGLN': responder_gln}
         try:
@@ -113,28 +114,37 @@ class VerifyView(APIView):
             # Get Querystring Params
             exp = request.GET.get('exp', '')
             correlation_id = request.GET.get('corrUUID', '')
+            reqGLN = request.GET.get('reqGLN')
+            linkType = request.GET.get('linkType')
+            context = request.GET.get('context')
             # Verify
-            verification_message = Verification.verify(gtin=gtin,
+
+            verification_message = Verification().verify(gtin=gtin,
                                                        lot=lot,
                                                        serial_number=serial_number,
                                                        correlation_id=correlation_id,
-                                                       exp=exp)
+                                                       exp=exp, linkType=linkType,
+                                                       context=context,
+                                                       reqGLN=reqGLN)
             # Build Response
-            success = True
+            data = verification_message.get('data', None)
+            success = data.get('verified', False) if data else False
             ret_val = Response(
                 verification_message,
                 status=status.HTTP_200_OK,
                 headers={'Cache-Control': 'private, no-cache'},
                 content_type="application/json"
             )
+        except exceptions.APIException:
+            raise
         except Exception:
             # Exception Occurred, return 401
             tb = traceback.format_exc()
             logger.error(tb)
-            ret_val = Response(
-                status=status.HTTP_401_UNAUTHORIZED,
-                headers={'Cache-Control': 'private, no-cache'},
-                content_type="application/json"
+            raise exceptions.APIException(
+                'There was an unexpected exception processing the request. %s'
+                % str(tb),
+                400
             )
 
         finally:
@@ -142,7 +152,7 @@ class VerifyView(APIView):
             RequestLogger.log(request, response=ret_val, operation='verify',
                               success=success)
             # return built response
-            return ret_val
+        return ret_val
 
 
 class GTINMapView(viewsets.ModelViewSet):
