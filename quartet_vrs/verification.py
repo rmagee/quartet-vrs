@@ -181,7 +181,7 @@ class Verification:
                     'system.' % reqGLN, 401)
             else:
                 ca = CompanyAccess.objects.get(company__GLN13 = reqGLN)
-                response_gln = ca.responder if ca.responder else \
+                response_gln = ca.responder.GLN13 if ca.responder else \
                     getattr(settings, 'DEFAULT_VRS_RESPONDER_GLN')
 
 
